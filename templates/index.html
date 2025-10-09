@@ -1,41 +1,222 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Excel Analyzer AI</title>
+  <meta charset="UTF-8" />
+  <title>Excel Analyzer AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- ✅ Markdown renderer -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #2563eb;
+      --accent-2: #1e40af;
+      --border: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 2rem;
+      background: radial-gradient(1200px 800px at 20% -10%, #1e293b 0%, #0b1020 40%, var(--bg) 100%);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      line-height: 1.5;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    h1 { font-size: 1.6rem; margin: 0 0 1rem 0; letter-spacing: 0.2px; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.25rem;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 8px 30px rgba(0,0,0,0.25);
+      backdrop-filter: blur(6px);
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .row > .card { height: 100%; }
+    .label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 0.4rem; }
+    .controls { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    input[type="file"] { color: var(--text); }
+    input[type="text"] {
+      width: 100%; padding: 0.7rem 0.8rem;
+      border-radius: 10px; border: 1px solid var(--border);
+      background: #0b1324; color: var(--text);
+      outline: none;
+    }
+    button {
+      appearance: none; border: 1px solid var(--accent-2);
+      background: linear-gradient(180deg, var(--accent), #1d4ed8);
+      color: white; padding: 0.6rem 0.9rem;
+      border-radius: 12px; font-weight: 600; cursor: pointer;
+      transition: transform .04s ease, filter .2s ease, opacity .2s ease;
+    }
+    button:hover { filter: brightness(1.05); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .ghost {
+      background: transparent; border: 1px solid var(--border); color: var(--text);
+    }
+    .status { font-size: 0.9rem; color: var(--muted); min-height: 1.2rem; }
+    #output {
+      background: #0a0f1f;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin: 0;
+      max-height: 65vh;
+      overflow: auto;
+      font-size: 0.92rem;
+      line-height: 1.55;
+    }
+    #output h1, #output h2, #output h3 { color: #fff; }
+    #output table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+    }
+    #output th, #output td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+    }
+    #output code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 4px; }
+    .spacer { height: 0.5rem; }
+  </style>
 </head>
 <body>
-<h2>Upload Excel File</h2>
-<form id="uploadForm">
-    <input type="file" id="fileInput" accept=".xlsx,.xls" required />
-    <button type="submit">Analyze</button>
-</form>
+  <div class="wrap">
+    <h1>Excel Analyzer AI</h1>
 
-<pre id="output"></pre>
+    <div class="row">
+      <!-- Left: controls -->
+      <div class="card">
+        <form id="uploadForm">
+          <label class="label" for="fileInput">Upload Excel file (.xlsx, .xls)</label>
+          <div class="controls" style="margin-bottom: 0.8rem;">
+            <input type="file" id="fileInput" accept=".xlsx,.xls" required />
+            <button id="analyzeBtn" type="submit">Analyze</button>
+            <button id="resetBtn" type="button" class="ghost">Reset</button>
+          </div>
+          <div class="status" id="statusText"></div>
 
-<script>
-const form = document.getElementById("uploadForm");
-const fileInput = document.getElementById("fileInput");
-const outputDiv = document.getElementById("output");
+          <div class="spacer"></div>
 
-form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const file = fileInput.files[0];
-    if (!file) return;
+          <label class="label" for="qInput">Ask a question about the uploaded file</label>
+          <input type="text" id="qInput" placeholder="e.g., What is the earliest proceeding date?" />
+          <div class="controls" style="margin-top: 0.6rem;">
+            <button id="askBtn" type="button" disabled>Ask</button>
+          </div>
+        </form>
+      </div>
 
-    const formData = new FormData();
-    formData.append("file", file);
+      <!-- Right: output -->
+      <div class="card">
+        <label class="label">Output</label>
+        <div id="output"></div>
+      </div>
+    </div>
+  </div>
 
-    outputDiv.textContent = "Analyzing...";
+  <script>
+    const form = document.getElementById("uploadForm");
+    const fileInput = document.getElementById("fileInput");
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    const askBtn = document.getElementById("askBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const qInput = document.getElementById("qInput");
+    const outputDiv = document.getElementById("output");
+    const statusText = document.getElementById("statusText");
 
-    try {
+    let lastFile = null;
+
+    function setLoading(isLoading, which = "analyze") {
+      if (which === "analyze") {
+        analyzeBtn.disabled = isLoading;
+        fileInput.disabled = isLoading;
+      }
+      if (which === "ask") {
+        askBtn.disabled = isLoading || !lastFile;
+        qInput.disabled = isLoading;
+      }
+      statusText.textContent = isLoading
+        ? (which === "ask" ? "Thinking…" : "Analyzing…")
+        : "";
+    }
+
+    function resetUI() {
+      outputDiv.innerHTML = "";
+      statusText.textContent = "";
+      qInput.value = "";
+      askBtn.disabled = true;
+      analyzeBtn.disabled = false;
+      fileInput.disabled = false;
+      lastFile = null;
+    }
+
+    resetBtn.addEventListener("click", () => {
+      fileInput.value = "";
+      resetUI();
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      lastFile = file;
+      setLoading(true, "analyze");
+      outputDiv.innerHTML = "";
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
         const res = await fetch("/analyze", { method: "POST", body: formData });
         const data = await res.json();
-        outputDiv.textContent = data.analysis || ("Error: " + (data.error || "Unknown error"));
-    } catch (err) {
+
+        const text = data.analysis || ("Error: " + (data.error || "Unknown error"));
+        const textStr = Array.isArray(text) ? text.join("\n\n") : text; // ✅ Fix for list output
+        outputDiv.innerHTML = marked.parse(textStr);
+
+        askBtn.disabled = !lastFile;
+      } catch (err) {
         outputDiv.textContent = "Request failed: " + err;
-    }
-});
-</script>
+      } finally {
+        setLoading(false, "analyze");
+      }
+    });
+
+    askBtn.addEventListener("click", async () => {
+      if (!lastFile) return;
+      const q = qInput.value.trim();
+      if (!q) {
+        qInput.focus();
+        return;
+      }
+
+      setLoading(true, "ask");
+      try {
+        const formData = new FormData();
+        formData.append("file", lastFile);
+        formData.append("question", q);
+
+        const res = await fetch("/ask", { method: "POST", body: formData });
+        if (!res.ok) {
+          outputDiv.textContent = "Ask endpoint isn’t available yet on the server.";
+          return;
+        }
+
+        const data = await res.json();
+        const text = data.answer || data.analysis || "No answer returned.";
+        const textStr = Array.isArray(text) ? text.join("\n\n") : text; // ✅ Fix for list output
+        outputDiv.innerHTML = marked.parse(textStr);
+      } catch (err) {
+        outputDiv.textContent = "Request failed: " + err;
+      } finally {
+        setLoading(false, "ask");
+      }
+    });
+  </script>
 </body>
 </html>
