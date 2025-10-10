@@ -62,9 +62,6 @@ def analyze():
         # This is the function that actually runs the ai processing
         response = lm(prompt)
 
-        print(type(response))
-        print(response)
-
         return jsonify({"analysis": response})
     
     # Error handling
